@@ -44,7 +44,7 @@ config['patient'] = LS # List of Patient Data
 config['trainingduration'] = 2 #How many sessions of training data
 config['channel'] = 'Parietal' # Option of 10-10, 10-20 or Patietal 
 config['trainFiles'] = findSession(config) # Track files used for config 
-config['locsdir'] = r"C:\Users\uceerjp\Desktop\G-W Data"
+config['locsdir'] = r"C:\Users\uceerjp\Desktop\G-W Data\Understanding Non-starionarity in GW Dataset\Understanding-Non-stationarity-over-2-Years-with-ALS"
 
 if config['alias'] == 'LS':
     config['bpf'] = [55,85]
@@ -54,8 +54,7 @@ elif config['alias'] == 'GH':
     config['dir'] = r"C:\Users\uceerjp\Desktop\G-W Data\eegGH"
     
  
-[data,config] = PreProcess(config) # Here lies the data
+[data,config] = PreProcess(config) # Here lies the data for whatever channels you want to see :) 
+
                                 
-
-
 

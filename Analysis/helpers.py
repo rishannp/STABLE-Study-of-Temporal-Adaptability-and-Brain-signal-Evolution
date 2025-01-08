@@ -207,16 +207,16 @@ def PreProcess(config):
             # Issue a warning if the file does not contain the expected fields
             warnings.warn(f'File {file} does not contain the expected fields.')
 
-    # print(allData[0]['signal'].shape)
-    # S = []
-    # config['channels'] = allData[0]['channels']
-    # for data in allData:
-    #     X = split(config['workingfs'], data['label'], data['signal'])
-    #     S.extend(X)
+    #print(allData[0]['signal'].shape)
+    S = []
+    config['channels'] = allData[0]['channels']
+    for data in allData:
+        X = split_eeg_by_labels(data['signal'], data['label'], config['workingfs'])
+        S.extend(X)
 
     # S = LRvRe(S)
 
-    return allData, config
+    return S, config
 
 def bandpass(data, bpf, fs):
     """
@@ -247,65 +247,54 @@ def bandpass(data, bpf, fs):
     return filtered_data
 
 
+import numpy as np
 from scipy.signal import find_peaks
 
-def split(fs, target, eeg):
-    # This function is for splitting data when in training/retraining phase.
-    # This function allows for the splitting of different classes into their
-    # own variables held in a struct. It makes it easy to train on.
+def split_eeg_by_labels(eeg, target,fs):
+    """
+    Splits EEG data into segments for each class based on the labels.
 
-    x = target
+    Parameters:
+        
 
+    Returns:
+        list: A list of dictionaries, where each dictionary contains EEG segments
+              for classes 'L', 'R', and 'Re'.
+    """
+    x = target.flatten()
+    
+    # Create binary masks for each label
     L = (x == 2).astype(int)
-    L[-1] = 0
-
     R = (x == 3).astype(int)
-    R[-1] = 0
-
     Re = (x == 1).astype(int)
-    Re[0] = 0
-    Re[-1] = 0
 
-    # The code above creates a separate variable for each class where they host
-    # their label in time.
+    # Flags to mark transitions
+    flagL = np.diff(L, prepend=0, append=0) != 0
+    flagR = np.diff(R, prepend=0, append=0) != 0
+    flagRe = np.diff(Re, prepend=0, append=0) != 0
+    
+    # Find the locations of transitions
+    locL, _ = find_peaks(flagL.astype(float))
+    locR, _ = find_peaks(flagR.astype(float))
+    locRe, _ = find_peaks(flagRe.astype(float))
 
-    flagL = np.zeros(len(x))
-    flagR = np.zeros(len(x))
-    flagRe = np.zeros(len(x))
+    # Truncate to the minimum number of presentations
+    a = [len(locL) // 2, len(locR) // 2, len(locRe) // 2]
+    b = min(a)
 
-    for i in range(1, len(L) - 1):
-        # find first 1
-        if L[i] == 1 and L[i-1] == 0 and L[i+1] == 1:
-            flagL[i] = 1
-        if L[i] == 1 and L[i-1] == 1 and L[i+1] == 0:
-            flagL[i] = 1
-
-        if R[i] == 1 and R[i-1] == 0 and R[i+1] == 1:
-            flagR[i] = 1
-        if R[i] == 1 and R[i-1] == 1 and R[i+1] == 0:
-            flagR[i] = 1
-
-        if Re[i] == 1 and Re[i-1] == 0 and Re[i+1] == 1:
-            flagRe[i] = 1
-        if Re[i] == 1 and Re[i-1] == 1 and Re[i+1] == 0:
-            flagRe[i] = 1
-
-    locL, _ = find_peaks(flagL)
-    locR, _ = find_peaks(flagR)
-    locRe, _ = find_peaks(flagRe)  # Finding the location of the start and stop of each presentation of the class
-
-    a = [len(locL), len(locR), len(locRe)]
-    b = min(a)  # Truncating the larger amount of Resting class compared to L/R
-
-    # NOTE: This can be changed to include adding MUCH more data.
-
+    # Prepare the output list
     S = []
-    for j in range(0, b - 1, 2):
-        eegL = eeg[locL[j]:locL[j+1], :]
-        eegR = eeg[locR[j]:locR[j+1], :]
-        eegRe = eeg[locRe[j]:locRe[j+1], :]
-        S.append({'L': eegL, 'R': eegR, 'Re': eegRe})
-
+    for j in range(b):
+        startL, stopL = locL[2 * j], locL[2 * j + 1]
+        startR, stopR = locR[2 * j], locR[2 * j + 1]
+        startRe, stopRe = locRe[2 * j], locRe[2 * j + 1]
+        
+        eeg2 = eeg[startL:stopL, :]
+        eeg3 = eeg[startR:stopR, :]
+        eeg1 = eeg[startRe:stopRe, :]
+        
+        S.append({'two': eeg2, 'three': eeg3, 'one': eeg1})
+    
     return S
 
 
