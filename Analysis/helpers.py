@@ -81,7 +81,7 @@ def selectEEGChannels(data, configType, locsdir):
     channel_names_10_20 = [
         'Fp1', 'Fp2', 'F7', 'F3', 'Fz', 'F4', 'F8',
         'T7', 'C3', 'Cz', 'C4', 'T8',
-        'P7', 'P3', 'Pz', 'P4', 'P8',
+        'P7/T5', 'P3', 'Pz', 'P4', 'P8/T6',
         'O1', 'O2'
     ]
 
@@ -91,13 +91,13 @@ def selectEEGChannels(data, configType, locsdir):
         'FT7', 'FC5', 'FC3', 'FC1', 'FCz', 'FC2', 'FC4', 'FC6', 'FT8',
         'T7', 'C5', 'C3', 'C1', 'Cz', 'C2', 'C4', 'C6', 'T8',
         'TP7', 'CP5', 'CP3', 'CP1', 'CPz', 'CP2', 'CP4', 'CP6', 'TP8',
-        'P7', 'P5', 'P3', 'P1', 'Pz', 'P2', 'P4', 'P6', 'P8',
+        'P7/T5', 'P5', 'P3', 'P1', 'Pz', 'P2', 'P4', 'P6', 'P8/T6',
         'PO7', 'PO3', 'POz', 'PO4', 'PO8',
         'O1', 'Oz', 'O2', 'Iz'
     ]
 
     parietal_channels = [
-        'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'Pz',
+        'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7/T5', 'P8/T6', 'Pz',
         'PO1', 'PO2', 'PO3', 'PO4', 'POz', 'O1', 'Oz', 'O2'
     ]
 
@@ -108,8 +108,10 @@ def selectEEGChannels(data, configType, locsdir):
         selected_channels = channel_names_10_10
     elif configType == 'Parietal':
         selected_channels = parietal_channels
+    elif configType == 'All':
+        selected_channels = all_labels  # Use all available channels
     else:
-        raise ValueError("Invalid configuration type. Choose from '10-20', '10-10', or 'Parietal'.")
+        raise ValueError("Invalid configuration type. Choose from '10-20', '10-10', 'Parietal', or 'All'.")
 
     # Match channels with indices and coordinates
     matched_channels = []
@@ -140,8 +142,6 @@ def selectEEGChannels(data, configType, locsdir):
     }
 
     return selected_data, selected_channels_info
-
-
 
 import scipy.io
 import numpy as np
