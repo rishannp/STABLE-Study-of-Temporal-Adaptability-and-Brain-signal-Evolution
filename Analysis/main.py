@@ -41,10 +41,11 @@ config['plen'] = 400 # Processing Epoch
 config['class'] = 2 # Number of Classes 
 config['alias'] = 'GH' # Patient Alias
 config['patient'] = GH # List of Patient Data
-config['trainingduration'] = 10 #How many sessions of training data
+config['trainingduration'] = 36 #How many sessions of training data
 config['channel'] = 'Parietal' # Option of 10-10, 10-20 or Patietal 
 config['trainFiles'] = findSession(config) # Track files used for config 
 config['locsdir'] = r"C:\Users\uceerjp\Desktop\G-W Data\Understanding Non-starionarity in GW Dataset\Understanding-Non-stationarity-over-2-Years-with-ALS"
+config['classselect'] = 'Rest' # Either 'Rest', 'Up', 'Down', 'Up and Down', 'All'
 
 if config['alias'] == 'LS':
     config['bpf'] = [55,85]

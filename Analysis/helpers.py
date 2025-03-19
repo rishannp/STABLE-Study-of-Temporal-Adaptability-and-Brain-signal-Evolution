@@ -172,28 +172,18 @@ def PreProcess(config):
             
             # Bandpass filter the signal
             signal = bandpass(signal, config['bpf'], config['fs'])
-            #print(signal.shape)
             
-            # Resample the signal (computational redundancy)
+            # Resample the signal
             signal = resample(signal, int(signal.shape[0] * config['workingfs'] / config['fs']), axis=0)
-            
-            #print(signal.shape)
             
             # Flatten the label_data to make sure it's 1D
             label_data = states['PresentationPhase'].flatten()
             label_data = label_data[0]
             
-            # Ensure label_data is 1D
-            #print("Shape of label_data:", label_data.shape)  # Expected output: (152560,)
-            
-            # Resample the flattened label_data
+            # Resample the label_data
             label = resample(label_data, int(label_data.shape[0] * config['workingfs'] / config['fs']), axis=0)
-            
-            # Debug print to check the shape after resampling
-            #print("Shape of resampled label:", label.shape)
-
             label = np.round(label)
-            # label = label + 1  # Makes Re = 1, Up = 2, Down = 3
+            # Note: 1 = Rest, 2 = Up, 3 = Down
 
             # Store the processed data in allData
             allData.append({
@@ -207,16 +197,39 @@ def PreProcess(config):
             # Issue a warning if the file does not contain the expected fields
             warnings.warn(f'File {file} does not contain the expected fields.')
 
-    #print(allData[0]['signal'].shape)
     S = []
     config['channels'] = allData[0]['channels']
     for data in allData:
         X = split_eeg_by_labels(data['signal'], data['label'], config['workingfs'])
         S.extend(X)
 
-    # S = LRvRe(S)
+    # ---- Added Filtering Step Based on config['class'] ----
+    # Mapping of class names to keys produced by split_eeg_by_labels:
+    # 'Rest' corresponds to key 'one' (label 1),
+    # 'Up' corresponds to key 'two' (label 2),
+    # 'Down' corresponds to key 'three' (label 3),
+    # 'Up and Down' corresponds to keys ['two', 'three'],
+    # 'All' keeps all keys.
+    class_map = {
+        'Rest': ['one'],
+        'Up': ['two'],
+        'Down': ['three'],
+        'Up and Down': ['two', 'three'],
+        'All': ['one', 'two', 'three']
+    }
+    selected_keys = class_map.get(config.get('classselect', 'All'), ['one', 'two', 'three'])
+    
+    filtered_S = []
+    for segment in S:
+        # Build a new dictionary that only contains the desired keys
+        filtered_segment = {k: segment[k] for k in selected_keys if k in segment}
+        filtered_S.append(filtered_segment)
+    
+    S = filtered_S
+    # ---------------------------------------------------------
 
     return S, config
+
 
 def bandpass(data, bpf, fs):
     """
