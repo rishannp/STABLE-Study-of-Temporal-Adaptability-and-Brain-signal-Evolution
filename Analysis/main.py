@@ -42,7 +42,7 @@ config['class'] = 2 # Number of Classes
 config['alias'] = 'GH' # Patient Alias
 config['patient'] = GH # List of Patient Data
 config['trainingduration'] = 36 #How many sessions of training data
-config['channel'] = 'Parietal' # Option of 10-10, 10-20 or Patietal 
+config['channel'] = 'All' # Option of 10-10, 10-20, Patietal or All 
 config['trainFiles'] = findSession(config) # Track files used for config 
 config['locsdir'] = r"C:\Users\uceerjp\Desktop\G-W Data\Understanding Non-starionarity in GW Dataset\Understanding-Non-stationarity-over-2-Years-with-ALS"
 config['classselect'] = 'Rest' # Either 'Rest', 'Up', 'Down', 'Up and Down', 'All'
@@ -57,5 +57,9 @@ elif config['alias'] == 'GH':
  
 [data,config] = PreProcess(config) # Here lies the data for whatever channels you want to see :) 
 
-                                
+#%% Produce PLV values for Global Structures
+
+from helpers import process_S_and_save_plv
+process_S_and_save_plv(data, output_dir=r"C:\users\uceerjp\desktop\g-w data\understanding non-starionarity in gw dataset\understanding-non-stationarity-over-2-years-with-als\analysis\Graph RSNs", channel_labels=config['channels']['Channel'])
+
 
