@@ -10,21 +10,50 @@ import scipy
 from os.path import dirname, join as pjoin
 import scipy.io
 import warnings
-from scipy.signal import resample, butter, filtfilt
+from scipy.signal import resample, butter, filtfilt, hilbert
 
 def findSession(config):
     """
-    Returns only the files corresponding to calibration runs (odd session numbers)
-    from config['patient']. The session number is extracted from characters 5 and 6.
+    Returns only the files corresponding to calibration runs (odd run numbers)
+    from config['patient'], but limits the selection to a specified number of sessions 
+    as given by config['trainingduration'].
+    
+    For example, for a file "GHS001R01.mat":
+      - Session is extracted as "001" (characters after the prefix "GHS").
+      - Run number is extracted as "01" (the two digits after "R").
+    Only files with an odd run number are included.
     """
-    a = config['patient']
-    # Filter files with an odd session number
-    odd_files = [patient for patient in a if int(patient[4:6]) % 2 == 1]
-    # Sort files in ascending order by the session number
-    odd_files = sorted(odd_files, key=lambda x: int(x[4:6]))
-    # Limit the number of files based on trainingduration (if desired)
-    training_duration = config.get('trainingduration', len(odd_files))
-    return odd_files[:training_duration]
+    files = config['patient']
+    sessions = {}
+    for file in files:
+        try:
+            parts = file.split("R")
+            # Extract session: remove the first three characters from the part before "R"
+            session = parts[0][3:]
+            # Extract the run number: first two characters after "R"
+            run_str = parts[1][:2]
+            run_num = int(run_str)
+        except Exception as e:
+            print(f"Error processing file {file}: {e}")
+            continue
+        if run_num % 2 == 1:  # Only include odd runs
+            if session not in sessions:
+                sessions[session] = []
+            sessions[session].append(file)
+    
+    # Sort sessions numerically (as integers)
+    sorted_sessions = sorted(sessions.keys(), key=lambda s: int(s))
+    session_limit = config.get('trainingduration', len(sorted_sessions))
+    selected_sessions = sorted_sessions[:session_limit]
+    
+    # Collect files from the selected sessions; sort the files within each session by run number.
+    selected_files = []
+    for session in selected_sessions:
+        session_files = sorted(sessions[session], key=lambda f: int(f.split("R")[1][:2]))
+        selected_files.extend(session_files)
+    
+    return selected_files
+
 
 def selectEEGChannels(data, configType, locsdir):
     # Load the .mat file
@@ -122,21 +151,38 @@ def bandpass(data, bpf, fs):
         filtered_data[:, ch] = filtfilt(b, a, data[:, ch])
     return filtered_data
 
+def plvfcn(eegData):
+    """
+    Computes the Phase Locking Value (PLV) matrix from EEG data.
+    Uses all electrodes in the provided data.
+    """
+    numElectrodes = eegData.shape[1]
+    numTimeSteps = eegData.shape[0]
+    plvMatrix = np.zeros((numElectrodes, numElectrodes))
+    for electrode1 in range(numElectrodes):
+        for electrode2 in range(electrode1 + 1, numElectrodes):
+            phase1 = np.angle(hilbert(eegData[:, electrode1]))
+            phase2 = np.angle(hilbert(eegData[:, electrode2]))
+            phase_difference = phase2 - phase1
+            plv = np.abs(np.sum(np.exp(1j * phase_difference)) / numTimeSteps)
+            plvMatrix[electrode1, electrode2] = plv
+            plvMatrix[electrode2, electrode1] = plv
+    return plvMatrix
+
 def PreProcess(config):
     """
-    Loads each file (from calibration runs only), processes the signal,
-    and returns a list S where each element is a dictionary with key 'rest'
-    mapping to the entire resting signal.
+    Loads each calibration file (only odd run numbers), processes the signal,
+    computes the PLV matrix immediately, and returns a list S where each element is
+    a dictionary with key 'rest' mapping to the PLV matrix.
     """
     f = findSession(config)
-
-    # Initialize a list to hold all the loaded and processed data
-    allData = []
-
+    S = []
     # Iterate over each file in the list f
     for file in f:
+        print("Processing file:", file)  # Print the file name before processing
         data_dir = config['dir']
         filename = pjoin(data_dir, file)
+        #print("file loaded")
         data = scipy.io.loadmat(filename)
 
         # Check if the loaded data contains the expected fields
@@ -153,52 +199,22 @@ def PreProcess(config):
             # Resample the signal
             signal = resample(signal, int(signal.shape[0] * config['workingfs'] / config['fs']), axis=0)
             
-            # Since all data are resting (calibration), no label processing is needed.
-            allData.append({
-                'parameters': data['parameters'],
-                'signal': signal,
-                'states': states,
-                'channels': channels
-            })
+            # Compute the PLV matrix immediately to reduce storage burden
+            #print("Computing PLV")
+            plv_matrix = plvfcn(signal)
+            
+            # Append the PLV matrix under the key 'rest'
+            S.append({'rest': plv_matrix})
         else:
             warnings.warn(f'File {file} does not contain the expected fields.')
 
-    # Store channel information in config
-    config['channels'] = allData[0]['channels']
-    
-    # For each file, store the entire signal under the key 'rest'
-    S = []
-    for data in allData:
-        S.append({'rest': data['signal']})
-    
+    # Store channel information in config (from first file)
+    config['channels'] = channels
     return S, config
 
 #%% Data Science Helpers for PLV Computation
-import scipy.signal as sig
 import matplotlib.pyplot as plt
-
-def plvfcn(eegData):
-    # Use all electrodes in the provided data
-    numElectrodes = eegData.shape[1]
-    numTimeSteps = eegData.shape[0]
-    plvMatrix = np.zeros((numElectrodes, numElectrodes))
-    for electrode1 in range(numElectrodes):
-        for electrode2 in range(electrode1 + 1, numElectrodes):
-            phase1 = np.angle(sig.hilbert(eegData[:, electrode1]))
-            phase2 = np.angle(sig.hilbert(eegData[:, electrode2]))
-            phase_difference = phase2 - phase1
-            plv = np.abs(np.sum(np.exp(1j * phase_difference)) / numTimeSteps)
-            plvMatrix[electrode1, electrode2] = plv
-            plvMatrix[electrode2, electrode1] = plv
-    return plvMatrix
-
-def compute_plv_instance(subject_data):
-    """
-    Compute PLV matrix for one subject instance.
-    subject_data: dict with key 'rest' mapping to an EEG segment
-    Returns: a dictionary with key 'rest' mapping to the PLV matrix.
-    """
-    return {'rest': plvfcn(subject_data['rest'])}
+import scipy.signal as sig
 
 def save_plv_graph(plv_matrix, channel_labels, output_filename):
     """
@@ -229,11 +245,11 @@ def save_plv_graph(plv_matrix, channel_labels, output_filename):
 
 def process_S_and_save_plv(S, output_dir, channel_labels):
     """
-    For each instance in S (a list of dictionaries where each dictionary has key 'rest'),
-    compute the PLV matrix and save the resulting graph.
+    For each instance in S (a list of dictionaries where each dictionary has key 'rest'
+    containing a PLV matrix), save the resulting PLV graph.
     
     Parameters:
-        S (list): List of dictionaries with EEG segments.
+        S (list): List of dictionaries with PLV matrices.
         output_dir (str): Directory to save PLV graphs.
         channel_labels (list): List of electrode labels for the axes.
     """
@@ -241,8 +257,6 @@ def process_S_and_save_plv(S, output_dir, channel_labels):
         os.makedirs(output_dir)
         
     for i, instance in enumerate(S):
-        plv_dict = compute_plv_instance(instance)
-        # Now the only key is 'rest'
         output_filename = os.path.join(output_dir, f"plv_instance_{i}_rest.png")
-        save_plv_graph(plv_dict['rest'], channel_labels, output_filename)
+        save_plv_graph(instance['rest'], channel_labels, output_filename)
         print(f"Saved PLV graph for instance {i}, class rest to {output_filename}")

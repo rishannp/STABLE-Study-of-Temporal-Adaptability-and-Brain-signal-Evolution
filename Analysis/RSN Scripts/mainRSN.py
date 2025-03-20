@@ -7,7 +7,7 @@ Bioelectronics Group and Aspire Create
 
 UCL
 
-### Exploratory Data Analysis ###
+### Resting State Network Analysis ###
 """
 
 import matplotlib as plt
@@ -15,6 +15,7 @@ import numpy as np
 import os
 import glob
 import scipy
+import pickle
 
 from rsnhelpers import findSession, selectEEGChannels, PreProcess
 
@@ -41,7 +42,7 @@ config['plen'] = 400 # Processing Epoch
 config['class'] = 2 # Number of Classes 
 config['alias'] = 'GH' # Patient Alias
 config['patient'] = GH # List of Patient Data
-config['trainingduration'] = 36 #How many sessions of training data
+config['trainingduration'] = 36 #How many files of data (set it to something above 200 for all)
 config['channel'] = 'All' # Option of 10-10, 10-20, Patietal or All 
 config['trainFiles'] = findSession(config) # Track files used for config 
 config['locsdir'] = r"C:\Users\uceerjp\Desktop\G-W Data\Understanding Non-starionarity in GW Dataset\Understanding-Non-stationarity-over-2-Years-with-ALS"
@@ -57,9 +58,11 @@ elif config['alias'] == 'GH':
  
 [data,config] = PreProcess(config) # Here lies the data for whatever channels you want to see :) 
 
-#%% Produce PLV values for Global Structures
+# Save the processed data and config into a file
+with open('RSNplv.pkl', 'wb') as f:
+    pickle.dump((data, config), f)
+#%% Plot and save PLV for global structures
 
-from rsnhelpers import process_S_and_save_plv
-process_S_and_save_plv(data, output_dir=r"C:\users\uceerjp\desktop\g-w data\understanding non-starionarity in gw dataset\understanding-non-stationarity-over-2-years-with-als\analysis\Graph RSNs", channel_labels=config['channels']['Channel'])
-
+with open('RSNplv.pkl', 'rb') as f:
+    data, config = pickle.load(f)
 
