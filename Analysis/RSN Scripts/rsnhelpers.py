@@ -216,9 +216,16 @@ def PreProcess(config):
 import matplotlib.pyplot as plt
 import scipy.signal as sig
 
-def save_plv_graph(plv_matrix, channel_labels, output_filename):
+def save_plv_graph_session(plv_matrix, channel_labels, output_filename, session_number):
     """
-    Save a PLV matrix as an image with electrode labels on both axes.
+    Save a PLV matrix as an image with electrode labels on both axes,
+    and include the session number in the title.
+    
+    Parameters:
+      plv_matrix: numpy array of shape (numElectrodes, numElectrodes)
+      channel_labels: list of electrode labels (must match number of electrodes in plv_matrix)
+      output_filename: file path where the figure will be saved.
+      session_number: integer, the session number to include in the title.
     """
     numElectrodes = plv_matrix.shape[0]
     # Use a fixed figure size (8 x 6 inches)
@@ -226,27 +233,29 @@ def save_plv_graph(plv_matrix, channel_labels, output_filename):
     
     cax = ax.imshow(plv_matrix, cmap='hot', vmin=0, vmax=1)
     fig.colorbar(cax)
-    ax.set_title("PLV Matrix", fontsize=14)
+    # Set title with session number
+    ax.set_title(f"Session {session_number}", fontsize=14)
     
     # Set ticks for each electrode
     ax.set_xticks(np.arange(numElectrodes))
     ax.set_yticks(np.arange(numElectrodes))
     
     if len(channel_labels) == numElectrodes:
-        ax.set_xticklabels(channel_labels, rotation=90, ha='right', fontsize=8)
-        ax.set_yticklabels(channel_labels, fontsize=8)
+        ax.set_xticklabels(channel_labels, rotation=90, ha='right', fontsize=2)
+        ax.set_yticklabels(channel_labels, fontsize=2)
     else:
-        ax.set_xticklabels(np.arange(numElectrodes), fontsize=8)
-        ax.set_yticklabels(np.arange(numElectrodes), fontsize=8)
+        ax.set_xticklabels(np.arange(numElectrodes), fontsize=2)
+        ax.set_yticklabels(np.arange(numElectrodes), fontsize=2)
     
     plt.tight_layout()
     plt.savefig(output_filename)
     plt.close()
 
-def process_S_and_save_plv(S, output_dir, channel_labels):
+def process_S_and_save_plv_session(S, output_dir, channel_labels):
     """
     For each instance in S (a list of dictionaries where each dictionary has key 'rest'
-    containing a PLV matrix), save the resulting PLV graph.
+    containing a PLV matrix), plot the data with a title indicating the session number,
+    and save the resulting image in the output_dir folder (e.g. "RSN").
     
     Parameters:
         S (list): List of dictionaries with PLV matrices.
@@ -257,6 +266,13 @@ def process_S_and_save_plv(S, output_dir, channel_labels):
         os.makedirs(output_dir)
         
     for i, instance in enumerate(S):
-        output_filename = os.path.join(output_dir, f"plv_instance_{i}_rest.png")
-        save_plv_graph(instance['rest'], channel_labels, output_filename)
-        print(f"Saved PLV graph for instance {i}, class rest to {output_filename}")
+        session_number = i + 1
+        output_filename = os.path.join(output_dir, f"plv_session_{session_number}.png")
+        save_plv_graph_session(instance['rest'], channel_labels, output_filename, session_number)
+        print(f"Saved PLV graph for Session {session_number} to {output_filename}")
+
+# Example usage:
+# Assume 'data' is your list of PLV dictionaries returned by PreProcess
+# and config['channels']['Channel'] is your list of electrode labels.
+# Save the plots in a folder called "RSN"
+# process_S_and_save_plv_session(data, output_dir="RSN", channel_labels=config['channels']['Channel'])

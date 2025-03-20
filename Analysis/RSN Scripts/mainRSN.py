@@ -62,7 +62,9 @@ elif config['alias'] == 'GH':
 with open('RSNplv.pkl', 'wb') as f:
     pickle.dump((data, config), f)
 #%% Plot and save PLV for global structures
+from rsnhelpers import process_S_and_save_plv_session
 
 with open('RSNplv.pkl', 'rb') as f:
     data, config = pickle.load(f)
 
+process_S_and_save_plv_session(data, output_dir="RSN", channel_labels=config['channels']['Channel'])
