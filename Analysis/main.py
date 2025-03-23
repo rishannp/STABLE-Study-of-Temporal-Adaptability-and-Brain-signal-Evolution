@@ -59,7 +59,11 @@ elif config['alias'] == 'GH':
 
 #%% Produce PLV values for Global Structures
 
-from helpers import process_S_and_save_plv
-process_S_and_save_plv(data, output_dir=r"C:\users\uceerjp\desktop\g-w data\understanding non-starionarity in gw dataset\understanding-non-stationarity-over-2-years-with-als\analysis\Graph RSNs", channel_labels=config['channels']['Channel'])
+from rsnhelpers import process_S_and_save_matrix_session
+import pickle
 
+with open('RSN.pkl', 'rb') as f:
+    data, config = pickle.load(f)
+
+process_S_and_save_matrix_session(data, output_dir="RSN", channel_labels=config['channels']['Channel'])
 

@@ -13,6 +13,7 @@ import scipy.io
 import warnings
 from scipy.signal import resample, butter, filtfilt, hilbert, coherence, csd
 from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 def findSession(config):
     """
@@ -173,9 +174,7 @@ def plvfcn(eegData):
 def mscfcn(eegData, fs, nperseg=400):
     """
     Computes the Magnitude Squared Coherence (MSC) matrix from EEG data.
-    Uses only the first 19 electrodes.
     """
-    eegData = eegData[:, :]
     numElectrodes = eegData.shape[1]
     mscMatrix = np.zeros((numElectrodes, numElectrodes))
     for electrode1 in tqdm(range(numElectrodes), desc="Computing MSC", leave=False):
@@ -203,16 +202,52 @@ def csdfcn(eegData, fs):
             csdMatrix[electrode2, electrode1] = avg_csd
     return csdMatrix
 
-def PreProcess(config):
+def process_single_file(file, config, bands):
+    """
+    Processes a single file: loads data, selects channels, resamples,
+    applies bandpass filtering, and computes PLV, MSC, and CSD matrices
+    for each frequency band.
+    """
+    # Print the current file being processed
+    print(f"Processing file: {file}")
+    
+    data_dir = config['dir']
+    filename = pjoin(data_dir, file)
+    data_mat = scipy.io.loadmat(filename)
+    if not ('parameters' in data_mat and 'signal' in data_mat and 'states' in data_mat):
+        warnings.warn(f'File {file} does not contain the expected fields.')
+        return None
+
+    signal = data_mat['signal']
+    # Process the signal: select channels
+    signal, channels = selectEEGChannels(signal, config['channel'], config['locsdir'])
+    # Resample signal to working sampling frequency
+    signal = resample(signal, int(signal.shape[0] * config['workingfs'] / config['fs']), axis=0)
+    
+    plv_dict = {}
+    msc_dict = {}
+    csd_dict = {}
+    
+    for band_name, freq_range in bands.items():
+        filtered_signal = bandpass(signal, freq_range, config['workingfs'])
+        plv_dict[band_name] = plvfcn(filtered_signal)
+        msc_dict[band_name] = mscfcn(filtered_signal, fs=config['workingfs'], nperseg=256)
+        csd_dict[band_name] = csdfcn(filtered_signal, fs=config['workingfs'])
+    
+    return {'PLV': plv_dict, 'MSC': msc_dict, 'CSD': csd_dict}, channels
+
+
+def PreProcess_parallel(config):
     """
     Loads each calibration file (only odd run numbers), processes the signal,
     computes multiple PLV, MSC and CSD matrices for different frequency bands
     (Delta, Theta, Alpha, Beta, Gamma), and returns a list S where each element is a dictionary
-    with keys 'PLV', 'MSC', and 'CSD'. Under each key, there is a dictionary with the frequency
-    band as key and the corresponding matrix as value.
+    with keys 'PLV', 'MSC', and 'CSD'. Uses parallel processing to speed up computation.
     """
-    f = findSession(config)
+    files = findSession(config)
     S = []
+    channels = None  # To capture channel info from a successful file
+
     # Define frequency bands (Hz)
     bands = {
         'Delta': [1, 4],
@@ -222,33 +257,27 @@ def PreProcess(config):
         'Gamma': [30, 80]
     }
     
-    for file in tqdm(f, desc="Processing files"):
-        print("Processing file:", file)
-        data_dir = config['dir']
-        filename = pjoin(data_dir, file)
-        data = scipy.io.loadmat(filename)
-        if 'parameters' in data and 'signal' in data and 'states' in data:
-            signal = data['signal']
-            states = data['states']
-            # Select EEG channels
-            signal, channels = selectEEGChannels(signal, config['channel'], config['locsdir'])
-            # Resample signal to working sampling frequency
-            signal = resample(signal, int(signal.shape[0] * config['workingfs'] / config['fs']), axis=0)
-            
-            plv_dict = {}
-            msc_dict = {}
-            csd_dict = {}
-            for band_name, freq_range in bands.items():
-                filtered_signal = bandpass(signal, freq_range, config['workingfs'])
-                plv_dict[band_name] = plvfcn(filtered_signal)
-                msc_dict[band_name] = mscfcn(filtered_signal, fs=config['workingfs'], nperseg=256)
-                csd_dict[band_name] = csdfcn(filtered_signal, fs=config['workingfs'])
-            S.append({'PLV': plv_dict, 'MSC': msc_dict, 'CSD': csd_dict})
-        else:
-            warnings.warn(f'File {file} does not contain the expected fields.')
+    # Use a ProcessPoolExecutor to process files in parallel.
+    with ProcessPoolExecutor() as executor:
+        futures = {executor.submit(process_single_file, file, config, bands): file for file in files}
+        # Create a progress bar that tracks the completion of each file.
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Overall progress"):
+            file = futures[future]
+            try:
+                result = future.result()
+                if result is None:
+                    continue
+                processed_data, ch = result
+                S.append(processed_data)
+                # Capture channel info once (assuming it's consistent across files)
+                if channels is None:
+                    channels = ch
+            except Exception as e:
+                warnings.warn(f"Error processing file {file}: {e}")
     
     config['channels'] = channels
     return S, config
+
 
 #%% Data Science Helpers for Plotting
 def save_plv_graph_session(plv_matrix, channel_labels, output_filename, session_number, band_name):
