@@ -41,14 +41,16 @@ def main():
     config['workingfs'] =  200
     config['plen'] = 400     # Processing Epoch
     config['class'] = 2      # Number of Classes 
-    config['alias'] = 'GH'   # Patient Alias
-    config['patient'] = GH   # List of Patient Data
-    config['trainingduration'] = 36  # How many files of data (set it to something above 200 for all)
+    config['alias'] = 'LS'   # Patient Alias
+    config['patient'] = LS   # List of Patient Data
+    config['trainingduration'] = 200  # How many files of data (set it to something above 200 for all)
     config['channel'] = 'All'        # Option of 10-10, 10-20, Parietal or All 
     config['trainFiles'] = findSession(config)  # Track files used for config 
     config['locsdir'] = r"C:\Users\uceerjp\Desktop\G-W Data\Understanding Non-starionarity in GW Dataset\Understanding-Non-stationarity-over-2-Years-with-ALS"
     config['classselect'] = 'Rest'   # Either 'Rest', 'Up', 'Down', 'Up and Down', 'All'
-
+    config['laplacian'] = 0
+    config['plots'] = 0
+    
     if config['alias'] == 'LS':
         config['bpf'] = [55,85]
         config['dir'] = r"C:\Users\uceerjp\Desktop\G-W Data\eegLS"
@@ -64,13 +66,14 @@ def main():
         raise ValueError("No channel information was returned. Please verify that the files are valid and processed correctly.")
 
     # Save the processed data and config into a file
-    with open('RSN.pkl', 'wb') as f:
+    with open(f"RSN_{config['alias']}.pkl", 'wb') as f:
         pickle.dump((data, config), f)
 
-    # Import plotting helper from the original rsnhelpers (which does not use parallelism)
-    from rsnhelpers import process_S_and_save_matrix_session
 
-    process_S_and_save_matrix_session(data, output_dir="RSN", channel_labels=config['channels']['Channel'])
+    # Import plotting helper from the original rsnhelpers (which does not use parallelism)
+    from parallelrsnhelpers import process_S_and_save_matrix_session
+
+    process_S_and_save_matrix_session(data, output_dir="RSN", channel_labels=config['channels']['Channel'], config=config)
 
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@ Created on Tue Oct 15 07:08:05 2024
 Rishan Patel
 Bioelectronics Group and Aspire Create
 
-UCL
+UCL - OG Script
 
 ### Exploratory Data Analysis ###
 """

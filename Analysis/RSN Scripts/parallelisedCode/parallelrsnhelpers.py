@@ -202,6 +202,36 @@ def csdfcn(eegData, fs):
             csdMatrix[electrode2, electrode1] = avg_csd
     return csdMatrix
 
+def apply_laplacian_xyz(data, coords, radius=40):
+    """
+    Apply a Laplacian spatial filter using Euclidean distance between electrodes.
+    Each electrode is re-referenced by subtracting the mean of nearby electrodes.
+
+    Parameters:
+        data (samples x channels)
+        coords: dict with 'X', 'Y', 'Z' lists (must be same order as data)
+        radius: proximity threshold in normalized space
+
+    Returns:
+        laplacian_data: filtered data of same shape
+    """
+    n_channels = data.shape[1]
+    laplacian_data = np.zeros_like(data)
+    all_coords = np.array([coords['X'], coords['Y'], coords['Z']]).T
+
+    for i in range(n_channels):
+        dists = np.linalg.norm(all_coords - all_coords[i], axis=1)
+        neighbor_idxs = np.where((dists > 0) & (dists < radius))[0]
+
+        if len(neighbor_idxs) > 0:
+            neighbor_avg = np.mean(data[:, neighbor_idxs], axis=1)
+            laplacian_data[:, i] = data[:, i] - neighbor_avg
+        else:
+            laplacian_data[:, i] = data[:, i]  # No neighbors found
+
+    return laplacian_data
+
+
 def process_single_file(file, config, bands):
     """
     Processes a single file: loads data, selects channels, resamples,
@@ -221,6 +251,11 @@ def process_single_file(file, config, bands):
     signal = data_mat['signal']
     # Process the signal: select channels
     signal, channels = selectEEGChannels(signal, config['channel'], config['locsdir'])
+
+    # Apply Laplacian if enabled
+    if config.get('laplacian', 0) == 1:
+        signal = apply_laplacian_xyz(signal, channels)
+
     # Resample signal to working sampling frequency
     signal = resample(signal, int(signal.shape[0] * config['workingfs'] / config['fs']), axis=0)
     
@@ -232,7 +267,7 @@ def process_single_file(file, config, bands):
         filtered_signal = bandpass(signal, freq_range, config['workingfs'])
         plv_dict[band_name] = plvfcn(filtered_signal)
         msc_dict[band_name] = mscfcn(filtered_signal, fs=config['workingfs'], nperseg=256)
-        csd_dict[band_name] = csdfcn(filtered_signal, fs=config['workingfs'])
+        #csd_dict[band_name] = csdfcn(filtered_signal, fs=config['workingfs'])
     
     return {'PLV': plv_dict, 'MSC': msc_dict, 'CSD': csd_dict}, channels
 
@@ -346,7 +381,7 @@ def save_csd_graph_session(csd_matrix, channel_labels, output_filename, session_
     plt.savefig(output_filename)
     plt.close()
 
-def process_S_and_save_matrix_session(S, output_dir, channel_labels):
+def process_S_and_save_matrix_session(S, output_dir, channel_labels, config):
     """
     For each instance in S (a list of dictionaries where each dictionary has keys 'PLV', 'MSC',
     and 'CSD' containing dictionaries of matrices for each frequency band), plot the data for each band and
@@ -358,6 +393,11 @@ def process_S_and_save_matrix_session(S, output_dir, channel_labels):
         output_dir (str): Base directory to save the graphs.
         channel_labels (list): List of electrode labels for the axes.
     """
+    
+    if config.get('plots', 1) == 0:
+        print("⚠️ Skipping plot generation (config['plots'] == 0)")
+        return
+    
     # Base subfolders for each feature type
     feature_subfolders = {
         "PLV": os.path.join(output_dir, "PLV"),
