@@ -2,6 +2,8 @@
 """
 Created on Tue Oct 15 07:08:05 2024
 
+parallelMain.py
+
 Rishan Patel
 Bioelectronics Group and Aspire Create
 
@@ -10,15 +12,15 @@ UCL
 ### Resting State Network Analysis ###
 """
 
-import matplotlib as plt
-import numpy as np 
+import matplotlib.pyplot as plt   # fixed
+import numpy as np
 import os
 import glob
 import scipy
 import pickle
 
 # Import the necessary functions from your parallel helpers file.
-from parallelrsnhelpers import findSession, selectEEGChannels, PreProcess_parallel
+from parallelrsnhelpers import findSession, PreProcess_parallel, process_S_and_save_matrix_session
 
 def main():
     folder2 = r'C:\Users\uceerjp\Desktop\G-W Data\eegGH'
@@ -35,31 +37,71 @@ def main():
     # Clear unnecessary variables if needed
     del filesInFolder1, filesInFolder2, folder1, folder2
 
-    config = {}
-    config['fs'] =  500      # Sampling frequency
-    config['resample'] = 200 # Downsample Fs (not used in the parallel version)
-    config['workingfs'] =  200
-    config['plen'] = 400     # Processing Epoch
-    config['class'] = 2      # Number of Classes 
-    config['alias'] = 'LS'   # Patient Alias
-    config['patient'] = LS   # List of Patient Data
-    config['trainingduration'] = 200  # How many files of data (set it to something above 200 for all)
-    config['channel'] = 'All'        # Option of 10-10, 10-20, Parietal or All 
-    config['trainFiles'] = findSession(config)  # Track files used for config 
-    config['locsdir'] = r"C:\Users\uceerjp\Desktop\G-W Data\Understanding Non-starionarity in GW Dataset\Understanding-Non-stationarity-over-2-Years-with-ALS"
-    config['classselect'] = 'Rest'   # Either 'Rest', 'Up', 'Down', 'Up and Down', 'All'
-    config['laplacian'] = 0
-    config['plots'] = 0
-    
+    # ===== CONFIG =====
+    # NOTE: 'resample' is the processing sampling rate you want.
+    config = {
+        'fs': 500,                # raw sampling frequency
+        'resample': 200,          # processing sampling rate (downsample target)
+        'class': 2,               # keep if you want for future; not used in RSN calc
+        'alias': 'LS',            # 'LS' or 'GH'
+        'patient': LS,            # list of filenames for selected alias
+        'trainingduration': 9999, # how many sessions (use 9999 for all)
+        'channel': 'All',         # '10-20'|'10-10'|'Parietal'|'All'
+        'locsdir': r"C:\Users\uceerjp\Desktop\G-W Data\Understanding Non-starionarity in GW Dataset\Understanding-Non-stationarity-over-2-Years-with-ALS",
+        'classselect': 'Rest',
+        'plots': 1,
+
+        # Preprocessing
+        'preproc': {
+            'bad_channel_reject': True,
+            'bad_chan_zthr': 5.0,
+            'bandpass_full': [1, 97],   # full-range BPF before band splits
+            'apply_car': True           # CAR on by default
+        },
+
+        # Windowing (non-overlapping 5s)
+        'window': {
+            'length_sec': 5.0,
+            'overlap': 0.0
+        },
+
+        # Features to compute
+        'features': {
+            'fc': ['plv', 'icoh'],   # only PLV + iCoh
+            'icoh_method' : 'fft', # fft fast or welch slow
+            'icoh_freq_decimantion': 1,
+            'power': True,           # band power per band
+            'criticality': { 'lzc': True, 'ple': True}          # broadband 2–40 Hz per window
+        },
+
+        # Bands (global control)
+        'bands': {
+            '2-4':  [2, 4],
+            '4-7':  [4, 7],
+            '7-13': [7, 13],
+            '13-30':[13, 30],
+            '30-47':[30, 47],
+            '53-97':[53, 97]
+        },
+
+        # Placeholder for future source localization (kept minimal)
+        'source_localization': {
+            'enable': False,
+            'method': 'LCMV'
+        }
+    }
+
     if config['alias'] == 'LS':
-        config['bpf'] = [55,85]
+        config['bpf'] = [55, 85]
         config['dir'] = r"C:\Users\uceerjp\Desktop\G-W Data\eegLS"
+        config['patient'] = LS
     elif config['alias'] == 'GH':
-        config['bpf'] = [1,5]
+        config['bpf'] = [1, 5]
         config['dir'] = r"C:\Users\uceerjp\Desktop\G-W Data\eegGH"
+        config['patient'] = GH
 
     # Use the parallel processing version to process the data.
-    [data, config] = PreProcess_parallel(config)
+    S, config = PreProcess_parallel(config)
 
     # Check that channel information was successfully retrieved.
     if config.get('channels') is None:
@@ -67,13 +109,10 @@ def main():
 
     # Save the processed data and config into a file
     with open(f"RSN_{config['alias']}.pkl", 'wb') as f:
-        pickle.dump((data, config), f)
+        pickle.dump((S, config), f)
 
-
-    # Import plotting helper from the original rsnhelpers (which does not use parallelism)
-    from parallelrsnhelpers import process_S_and_save_matrix_session
-
-    process_S_and_save_matrix_session(data, output_dir="RSN", channel_labels=config['channels']['Channel'], config=config)
+    # Plots (includes: FC mean heatmaps + per-window heatmaps; and dataset-level time-series plots)
+    process_S_and_save_matrix_session(S, output_dir="RSN", channel_labels=config['channels']['Channel'], config=config)
 
 
 if __name__ == '__main__':
